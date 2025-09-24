@@ -1,139 +1,122 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 
 public class NPCPatrol : MonoBehaviour
 {
-    [Header("Patrol Settings")]
     public Transform[] waypoints;
-    public float detectionRange = 10f;
-    public float viewAngle = 45f;
-    public float losePlayerTime = 2f;
+    public Transform player;
+    public float visionRange = 10f;
+    public float visionAngle = 60f;
+    public float loseTime = 2f;
+    public float idleTime = 1.5f;
 
-    [Header("Chase Settings")]
-    public float attackDistance = 1.5f;
-
-    private int currentWaypoint = 0;
     private NavMeshAgent agent;
     private Animator anim;
-    private Transform player;
-    private float lastTimeSeenPlayer;
-    private bool chasingPlayer;
+
+    private int currentIndex;
+    private bool waiting;
+    private float loseTimer;
+    private enum State { Patrol, Chase }
+    private State state = State.Patrol;
 
     void Start()
     {
         agent = GetComponent<NavMeshAgent>();
         anim = GetComponent<Animator>();
-        player = GameObject.FindGameObjectWithTag("Player").transform;
-
-        if (waypoints.Length > 0)
-            GoToNextWaypoint();
+        GoToNextPoint();
     }
 
     void Update()
     {
-        if (chasingPlayer)
+        switch (state)
         {
-            ChasePlayer();
+            case State.Patrol:
+                PatrolBehaviour();
+                DetectPlayer();
+                break;
+
+            case State.Chase:
+                ChaseBehaviour();
+                break;
+        }
+
+        // Animación caminar
+        anim.SetBool("isWalking", agent.velocity.magnitude > 0.1f);
+    }
+
+    // --- PATRULLA ---
+    void PatrolBehaviour()
+    {
+        if (!agent.pathPending && agent.remainingDistance < 0.3f && !waiting)
+            StartCoroutine(WaitAndGo());
+    }
+
+    IEnumerator WaitAndGo()
+    {
+        waiting = true;
+        anim.SetBool("isWalking", false);
+        yield return new WaitForSeconds(idleTime);
+        GoToNextPoint();
+        waiting = false;
+    }
+
+    void GoToNextPoint()
+    {
+        if (waypoints.Length == 0) return;
+        agent.destination = waypoints[currentIndex].position;
+        currentIndex = (currentIndex + 1) % waypoints.Length;
+    }
+
+    // --- DETECCIÓN ---
+    void DetectPlayer()
+    {
+        Vector3 dirToPlayer = (player.position - transform.position).normalized;
+        float angle = Vector3.Angle(transform.forward, dirToPlayer);
+
+        if (Vector3.Distance(transform.position, player.position) < visionRange && angle < visionAngle)
+        {
+            if (Physics.Raycast(transform.position + Vector3.up, dirToPlayer, out RaycastHit hit, visionRange))
+            {
+                if (hit.collider.CompareTag("Player"))
+                {
+                    state = State.Chase;
+                    loseTimer = 0;
+                }
+            }
+        }
+    }
+
+    // --- PERSECUCIÓN ---
+    void ChaseBehaviour()
+    {
+        if (player == null) return;
+        agent.destination = player.position;
+
+        float distance = Vector3.Distance(transform.position, player.position);
+
+        // Si alcanza al jugador
+        if (distance < 1.5f)
+        {
+            SceneManager.LoadScene("GameOverScene"); // crea escena GameOver con UI
+        }
+
+        // Si no lo ve
+        Vector3 dirToPlayer = (player.position - transform.position).normalized;
+        float angle = Vector3.Angle(transform.forward, dirToPlayer);
+        if (Vector3.Distance(transform.position, player.position) > visionRange || angle > visionAngle)
+        {
+            loseTimer += Time.deltaTime;
+            if (loseTimer > loseTime)
+            {
+                state = State.Patrol;
+                GoToNextPoint();
+            }
         }
         else
         {
-            Patrol();
-        }
-
-        DetectPlayer();
-        UpdateAnimations();
-    }
-
-    #region Patrol
-    void Patrol()
-    {
-        if (!agent.pathPending && agent.remainingDistance < 0.5f)
-        {
-            GoToNextWaypoint();
+            loseTimer = 0;
         }
     }
-
-    void GoToNextWaypoint()
-    {
-        if (waypoints.Length == 0) return;
-
-        agent.destination = waypoints[currentWaypoint].position;
-        currentWaypoint = (currentWaypoint + 1) % waypoints.Length;
-    }
-
-    void ResumePatrol()
-    {
-        chasingPlayer = false;
-
-        // Encuentra el waypoint más cercano para reiniciar patrullaje
-        float minDist = Mathf.Infinity;
-        int nearest = 0;
-        for (int i = 0; i < waypoints.Length; i++)
-        {
-            float dist = Vector3.Distance(transform.position, waypoints[i].position);
-            if (dist < minDist)
-            {
-                minDist = dist;
-                nearest = i;
-            }
-        }
-
-        currentWaypoint = nearest;
-        GoToNextWaypoint();
-    }
-    #endregion
-
-    #region Detection
-    void DetectPlayer()
-    {
-        Vector3 direction = (player.position - transform.position).normalized;
-        float angle = Vector3.Angle(transform.forward, direction);
-
-        Ray ray = new Ray(transform.position + Vector3.up, direction);
-        RaycastHit hit;
-
-        if (angle < viewAngle && Physics.Raycast(ray, out hit, detectionRange))
-        {
-            if (hit.collider.CompareTag("Player"))
-            {
-                chasingPlayer = true;
-                lastTimeSeenPlayer = Time.time;
-            }
-        }
-
-        // Si pierde al jugador por más de losePlayerTime segundos
-        if (chasingPlayer && Time.time - lastTimeSeenPlayer > losePlayerTime)
-        {
-            ResumePatrol();
-        }
-    }
-    #endregion
-
-    #region Chase
-    void ChasePlayer()
-    {
-        agent.destination = player.position;
-
-        if (Vector3.Distance(transform.position, player.position) < attackDistance)
-        {
-            // Trigger de ataque antes de cambiar escena
-            anim.SetTrigger("attack");
-            Invoke("GameOver", 0.5f);
-        }
-    }
-
-    void GameOver()
-    {
-        SceneManager.LoadScene("GameOverScene");
-    }
-    #endregion
-
-    #region Animations
-    void UpdateAnimations()
-    {
-        anim.SetBool("isWalking", agent.velocity.magnitude > 0.1f && !chasingPlayer);
-        anim.SetBool("isChasing", chasingPlayer);
-    }
-    #endregion
 }
