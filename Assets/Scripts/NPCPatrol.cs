@@ -1,122 +1,113 @@
-﻿using System.Collections;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 
 public class NPCPatrol : MonoBehaviour
 {
+    [Header("Patrulla")]
     public Transform[] waypoints;
-    public Transform player;
+    private int currentWaypoint = 0;
+
+    [Header("Detección")]
     public float visionRange = 10f;
-    public float visionAngle = 60f;
+    public float visionAngle = 120f;
     public float loseTime = 2f;
+    private float loseTimer = 0f;
+
+    [Header("Idle")]
     public float idleTime = 1.5f;
+    private float idleTimer = 0f;
 
+    [Header("Configuración")]
+    public LayerMask playerMask;
     private NavMeshAgent agent;
-    private Animator anim;
+    private Transform player;
 
-    private int currentIndex;
-    private bool waiting;
-    private float loseTimer;
-    private enum State { Patrol, Chase }
-    private State state = State.Patrol;
+    private bool chasingPlayer = false;
 
     void Start()
     {
         agent = GetComponent<NavMeshAgent>();
-        anim = GetComponent<Animator>();
-        GoToNextPoint();
+        GoToNextWaypoint();
     }
 
     void Update()
     {
-        switch (state)
+        if (PlayerInSight())
         {
-            case State.Patrol:
-                PatrolBehaviour();
-                DetectPlayer();
-                break;
-
-            case State.Chase:
-                ChaseBehaviour();
-                break;
+            chasingPlayer = true;
+            loseTimer = 0f;
+            agent.SetDestination(player.position);
         }
-
-        // Animación caminar
-        anim.SetBool("isWalking", agent.velocity.magnitude > 0.1f);
-    }
-
-    // --- PATRULLA ---
-    void PatrolBehaviour()
-    {
-        if (!agent.pathPending && agent.remainingDistance < 0.3f && !waiting)
-            StartCoroutine(WaitAndGo());
-    }
-
-    IEnumerator WaitAndGo()
-    {
-        waiting = true;
-        anim.SetBool("isWalking", false);
-        yield return new WaitForSeconds(idleTime);
-        GoToNextPoint();
-        waiting = false;
-    }
-
-    void GoToNextPoint()
-    {
-        if (waypoints.Length == 0) return;
-        agent.destination = waypoints[currentIndex].position;
-        currentIndex = (currentIndex + 1) % waypoints.Length;
-    }
-
-    // --- DETECCIÓN ---
-    void DetectPlayer()
-    {
-        Vector3 dirToPlayer = (player.position - transform.position).normalized;
-        float angle = Vector3.Angle(transform.forward, dirToPlayer);
-
-        if (Vector3.Distance(transform.position, player.position) < visionRange && angle < visionAngle)
-        {
-            if (Physics.Raycast(transform.position + Vector3.up, dirToPlayer, out RaycastHit hit, visionRange))
-            {
-                if (hit.collider.CompareTag("Player"))
-                {
-                    state = State.Chase;
-                    loseTimer = 0;
-                }
-            }
-        }
-    }
-
-    // --- PERSECUCIÓN ---
-    void ChaseBehaviour()
-    {
-        if (player == null) return;
-        agent.destination = player.position;
-
-        float distance = Vector3.Distance(transform.position, player.position);
-
-        // Si alcanza al jugador
-        if (distance < 1.5f)
-        {
-            SceneManager.LoadScene("GameOverScene"); // crea escena GameOver con UI
-        }
-
-        // Si no lo ve
-        Vector3 dirToPlayer = (player.position - transform.position).normalized;
-        float angle = Vector3.Angle(transform.forward, dirToPlayer);
-        if (Vector3.Distance(transform.position, player.position) > visionRange || angle > visionAngle)
+        else if (chasingPlayer)
         {
             loseTimer += Time.deltaTime;
-            if (loseTimer > loseTime)
+            if (loseTimer >= loseTime)
             {
-                state = State.Patrol;
-                GoToNextPoint();
+                chasingPlayer = false;
+                GoToNextWaypoint();
+            }
+            else
+            {
+                if (player != null)
+                    agent.SetDestination(player.position);
             }
         }
         else
         {
-            loseTimer = 0;
+            Patrol();
+        }
+    }
+
+    void Patrol()
+    {
+        if (!agent.pathPending && agent.remainingDistance < 0.5f)
+        {
+            idleTimer += Time.deltaTime;
+            if (idleTimer >= idleTime)
+            {
+                GoToNextWaypoint();
+                idleTimer = 0f;
+            }
+        }
+    }
+
+    void GoToNextWaypoint()
+    {
+        if (waypoints.Length == 0) return;
+        agent.destination = waypoints[currentWaypoint].position;
+        currentWaypoint = (currentWaypoint + 1) % waypoints.Length;
+    }
+
+    bool PlayerInSight()
+    {
+        Collider[] targets = Physics.OverlapSphere(transform.position, visionRange, playerMask);
+
+        foreach (Collider target in targets)
+        {
+            Vector3 dirToTarget = (target.transform.position - transform.position).normalized;
+            float angle = Vector3.Angle(transform.forward, dirToTarget);
+
+            if (angle < visionAngle / 2f)
+            {
+                float dist = Vector3.Distance(transform.position, target.transform.position);
+
+                if (!Physics.Raycast(transform.position + Vector3.up * 1.5f, dirToTarget, dist, ~playerMask))
+                {
+                    player = target.transform;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            // Cargar pantalla GameOver
+            SceneManager.LoadScene("GameOverScene");
         }
     }
 }

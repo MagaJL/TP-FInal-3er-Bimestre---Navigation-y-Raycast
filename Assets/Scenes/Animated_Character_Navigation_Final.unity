@@ -503,6 +503,16 @@ PrefabInstance:
       propertyPath: m_TagString
       value: Player
       objectReference: {fileID: 0}
+    - target: {fileID: 8301348219256675485, guid: d23a71d629ca2cb428e58efdcf5d4c1b,
+        type: 3}
+      propertyPath: m_Layer
+      value: 9
+      objectReference: {fileID: 0}
+    - target: {fileID: 8301348219256675487, guid: d23a71d629ca2cb428e58efdcf5d4c1b,
+        type: 3}
+      propertyPath: m_Layer
+      value: 9
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: d23a71d629ca2cb428e58efdcf5d4c1b, type: 3}
 --- !u!4 &425972105 stripped
@@ -828,11 +838,13 @@ MonoBehaviour:
   - {fileID: 703583495}
   - {fileID: 183074978}
   - {fileID: 2002110383}
-  player: {fileID: 425972105}
-  visionRange: 10
-  visionAngle: 120
+  visionRange: 12
+  visionAngle: 60
   loseTime: 2
-  idleTime: 1.5
+  idleTime: 1.2
+  playerMask:
+    serializedVersion: 2
+    m_Bits: 512
 --- !u!195 &1496503088
 NavMeshAgent:
   m_ObjectHideFlags: 0
