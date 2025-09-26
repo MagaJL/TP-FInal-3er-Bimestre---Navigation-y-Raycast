@@ -4,77 +4,90 @@ using UnityEngine.SceneManagement;
 
 public class NPCPatrol : MonoBehaviour
 {
+    [Header("Patrulla")]
     public Transform[] waypoints;
-    public float visionRange = 10f;
-    public float visionAngle = 120f;
-    public float loseTime = 2f;
-    public LayerMask playerMask;
+    int destinoActual = 0;
 
-    private NavMeshAgent agent;
-    private Animator anim;
-    private Transform player;
-    private int wpIndex = 0;
-    private float loseTimer = 0;
-    private bool chasing = false;
+    [Header("Jugador")]
+    public Transform jugador;
+    public Transform vistaNPC;
+    public float visionDistancia = 10f;
+    public float visionAngulo = 60f;
+    public float distanciaPerseguir = 1.5f;
+
+    [Header("Persecución")]
+    public float tiempoPerdida = 2f;
+    float tiempoSinVer = 0f;
+    bool persiguiendo = false;
+
+    NavMeshAgent agente;
+    Animator anim;
+
+    void Awake()
+    {
+        agente = GetComponent<NavMeshAgent>();
+        anim = GetComponent<Animator>();
+    }
 
     void Start()
     {
-        agent = GetComponent<NavMeshAgent>();
-        anim = GetComponent<Animator>();
-        player = GameObject.FindGameObjectWithTag("Player").transform;
-        GoToNextPoint();
+        if (waypoints.Length > 0)
+            agente.SetDestination(waypoints[0].position);
     }
 
     void Update()
     {
-        if (CanSeePlayer())
-        {
-            chasing = true;
-            loseTimer = 0;
-            agent.SetDestination(player.position);
-        }
-        else if (chasing)
-        {
-            loseTimer += Time.deltaTime;
-            if (loseTimer >= loseTime)
-            {
-                chasing = false;
-                GoToNextPoint();
-            }
-            else
-                agent.SetDestination(player.position);
-        }
-        else if (!agent.pathPending && agent.remainingDistance < 0.2f)
-        {
-            GoToNextPoint();
-        }
+        anim.SetFloat("Speed", agente.velocity.magnitude);
 
-        anim.SetBool("isWalking", agent.velocity.magnitude > 0.1f);
+        if (persiguiendo) PerseguirJugador();
+        else { Patrullar(); DetectarJugador(); }
     }
 
-    bool CanSeePlayer()
-    {
-        Vector3 dir = (player.position - transform.position).normalized;
-        float angle = Vector3.Angle(transform.forward, dir);
-
-        if (Vector3.Distance(transform.position, player.position) <= visionRange && angle < visionAngle * 0.5f)
-        {
-            if (Physics.Raycast(transform.position + Vector3.up, dir, out RaycastHit hit, visionRange, ~0))
-                return hit.collider.CompareTag("Player");
-        }
-        return false;
-    }
-
-    void GoToNextPoint()
+    void Patrullar()
     {
         if (waypoints.Length == 0) return;
-        agent.destination = waypoints[wpIndex].position;
-        wpIndex = (wpIndex + 1) % waypoints.Length;
+
+        if (!agente.pathPending && agente.remainingDistance < 0.5f)
+        {
+            destinoActual = (destinoActual + 1) % waypoints.Length;
+            agente.SetDestination(waypoints[destinoActual].position);
+        }
     }
 
-    void OnCollisionEnter(Collision col)
+    void DetectarJugador()
     {
-        if (col.collider.CompareTag("Player"))
+        Vector3 dir = (jugador.position - vistaNPC.position).normalized;
+        float dist = Vector3.Distance(jugador.position, vistaNPC.position);
+
+        if (dist <= visionDistancia && Vector3.Angle(vistaNPC.forward, dir) < visionAngulo)
+        {
+            if (Physics.Raycast(vistaNPC.position, dir, out RaycastHit hit, visionDistancia) &&
+                hit.collider.CompareTag("Player"))
+            {
+                persiguiendo = true;
+                tiempoSinVer = 0f;
+            }
+        }
+    }
+
+    void PerseguirJugador()
+    {
+        agente.SetDestination(jugador.position);
+
+        if (Vector3.Distance(transform.position, jugador.position) <= distanciaPerseguir)
             SceneManager.LoadScene("GameOverScene");
+
+        Vector3 dir = (jugador.position - vistaNPC.position).normalized;
+        if (Physics.Raycast(vistaNPC.position, dir, out RaycastHit hit, visionDistancia) && hit.collider.CompareTag("Player"))
+            tiempoSinVer = 0f;
+        else
+        {
+            tiempoSinVer += Time.deltaTime;
+            if (tiempoSinVer >= tiempoPerdida)
+            {
+                persiguiendo = false;
+                agente.SetDestination(waypoints[destinoActual].position);
+            }
+        }
     }
 }

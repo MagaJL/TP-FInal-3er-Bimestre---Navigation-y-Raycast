@@ -838,13 +838,12 @@ MonoBehaviour:
   - {fileID: 703583495}
   - {fileID: 183074978}
   - {fileID: 2002110383}
-  visionRange: 12
-  visionAngle: 60
-  loseTime: 2
-  idleTime: 1.2
-  playerMask:
-    serializedVersion: 2
-    m_Bits: 512
+  jugador: {fileID: 425972105}
+  vistaNPC: {fileID: 1978980603}
+  visionDistancia: 10
+  visionAngulo: 60
+  distanciaPerseguir: 1.5
+  tiempoPerdida: 2
 --- !u!195 &1496503088
 NavMeshAgent:
   m_ObjectHideFlags: 0
@@ -1255,6 +1254,12 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 3fb269cac241226408bf2d63c2dbe471, type: 3}
+--- !u!4 &1978980603 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400050, guid: 3fb269cac241226408bf2d63c2dbe471,
+    type: 3}
+  m_PrefabInstance: {fileID: 1978980602}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &2002110382
 GameObject:
   m_ObjectHideFlags: 0
